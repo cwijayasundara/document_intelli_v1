@@ -87,18 +87,19 @@ temp/
 notebooks/results/
 evaluation_results/
 
-# Large files
-*.pdf
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.bmp
-*.tiff
-*.webp
+# Large files (excluded by default)
+# *.pdf
+# *.png
+# *.jpg
+# *.jpeg
+# *.gif
+# *.bmp
+# *.tiff
+# *.webp
 
-# But keep example documents (use git add -f if needed)
-# !difficult_examples/
+# Include sample/example documents
+!difficult_examples/
+!loan_docs/
 
 # Streamlit
 .streamlit/secrets.toml
