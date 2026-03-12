@@ -156,6 +156,42 @@ This pipeline processes documents through multiple stages:
 | **Rapid prototyping** | LlamaIndex or Reducto | Simplest API key setup, no cloud subscription needed |
 | **Air-gapped / offline** | Azure | Only option with disconnected container deployment |
 
+#### Benchmark Results (Real Document Tests)
+
+The following results were obtained by running all three implemented stacks on actual test documents from `difficult_examples/`.
+
+##### Certificate of Origin (PDF — tables, formal layout)
+
+| Metric | LlamaIndex | LandingAI | Reducto |
+|--------|------------|-----------|---------|
+| **Markdown length** | 3,985 chars | 4,201 chars | 4,018 chars |
+| **Chunks produced** | 3 | 0 | 4 |
+| **Classification** | certificate (4%) | other (0%) | certificate (75%) |
+| **Fields extracted** | 8 | 0 | 7 |
+| **Processing time** | 24.3s | 12.4s | 71.2s |
+
+##### Patient Intake Form (PDF — checkboxes, mixed fields)
+
+| Metric | LlamaIndex | LandingAI | Reducto |
+|--------|------------|-----------|---------|
+| **Markdown length** | 3,689 chars | 2,565 chars | 4,753 chars |
+| **Chunks produced** | 5 | 0 | 4 |
+| **Classification** | medical (4%) | other (0%) | form (25%) |
+| **Fields extracted** | 0 (schema validation error) | 0 | 4 (incl. nested objects + checkboxes) |
+| **Processing time** | 21.8s | 24.5s | 65.9s |
+
+##### Key Observations
+
+| Dimension | LlamaIndex | LandingAI | Reducto |
+|-----------|------------|-----------|---------|
+| **Classification accuracy** | Correct label but very low confidence (3-5%) | Does not classify unless schema matches | Best accuracy and confidence (25-75%) |
+| **Extraction depth** | Good for flat schemas; fails on nested Pydantic types (LlamaExtract API limitation) | Depends on schema match; no extraction without it | Richest — handles nested objects, checkboxes, key-value pairs |
+| **Speed** | Mid (~20-35s) | Fastest (~12-25s) | Slowest (~60-70s due to upload + multiple API calls) |
+| **Markdown quality** | Clean HTML tables with rowspan/colspan | Longest output with anchor IDs for grounding | Block-assembled; most content for form-type docs |
+| **Chunking** | Local rule-based (always produces chunks) | No chunks by default | API-powered section-based chunks |
+
+> **Test environment:** macOS, Python 3.12, documents from `difficult_examples/`. Processing times include network latency and vary by document complexity and API load.
+
 #### Large Document Handling (200+ Pages)
 
 > **Problem:** A 200-300 page document produces ~200K-500K+ tokens of markdown. Most LLM-backed extraction APIs have context limits of 100K-200K tokens. Sending the full markdown to an LLM for schema-based extraction will **fail, truncate, or produce incomplete results**.
