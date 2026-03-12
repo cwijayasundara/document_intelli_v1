@@ -118,10 +118,10 @@ class LoanFieldExtractor:
             if self.processor_name == "reducto":
                 # Reducto extracts from the uploaded file directly (server-side)
                 from src.reducto_stack.extractor import ReductoExtractWrapper
-                extractor = ReductoExtractWrapper(client=self.client)
-                result_obj = await extractor.extract(
+                extractor = ReductoExtractWrapper()
+                result_obj = await extractor.extract_with_json_schema(
                     content=markdown_content or "",
-                    schema=json_schema,
+                    json_schema=json_schema,
                     file_path=file_path
                 )
                 cleaned_fields = {k: v for k, v in result_obj.fields.items() if v is not None}
@@ -227,10 +227,10 @@ class LoanFieldExtractor:
         try:
             if self.processor_name == "reducto":
                 from src.reducto_stack.extractor import ReductoExtractWrapper
-                extractor = ReductoExtractWrapper(client=self.client)
-                result_obj = await extractor.extract(
+                extractor = ReductoExtractWrapper()
+                result_obj = await extractor.extract_with_json_schema(
                     content=markdown_content or "",
-                    schema=json_schema,
+                    json_schema=json_schema,
                     file_path=file_path
                 )
                 return result_obj.fields

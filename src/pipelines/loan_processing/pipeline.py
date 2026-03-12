@@ -273,7 +273,7 @@ class LoanProcessingPipeline:
         logger.info(f"Parsing document (API call) with {self.processor_name}: {file_path}")
         if self.processor_name == "reducto":
             from src.reducto_stack.parser import ReductoParseWrapper
-            parser = ReductoParseWrapper(client=self.client)
+            parser = ReductoParseWrapper()
             result = await parser.parse(file_path=file_path)
         else:
             result = await self.client.parse(file_path=file_path)
