@@ -166,8 +166,10 @@ def run_async(coro):
     return loop.run_until_complete(coro)
 
 
-def check_api_key():
-    """Check if LandingAI API key is configured."""
+def check_api_key(processor: str = "landingai"):
+    """Check if the API key for the selected processor is configured."""
+    if processor == "reducto":
+        return bool(os.environ.get("REDUCTO_API_KEY"))
     return bool(os.environ.get("LANDINGAI_API_KEY"))
 
 
@@ -200,13 +202,30 @@ def render_sidebar():
     with st.sidebar:
         st.title("⚙️ Configuration")
 
+        # Processor selection
+        st.subheader("🔧 Processor")
+        processor = st.radio(
+            "Select Processor",
+            ["LandingAI", "Reducto"],
+            index=0,
+            help="Choose which document AI processor to use"
+        )
+        processor_key = processor.lower()
+
         # API Key Status
         st.subheader("🔑 API Key Status")
-        if check_api_key():
-            st.success("✓ LANDINGAI_API_KEY configured")
+        if processor_key == "reducto":
+            if check_api_key("reducto"):
+                st.success("✓ REDUCTO_API_KEY configured")
+            else:
+                st.error("✗ REDUCTO_API_KEY not set")
+                st.info("Set the REDUCTO_API_KEY environment variable to use Reducto.")
         else:
-            st.error("✗ LANDINGAI_API_KEY not set")
-            st.info("Set the LANDINGAI_API_KEY environment variable to use this feature.")
+            if check_api_key("landingai"):
+                st.success("✓ LANDINGAI_API_KEY configured")
+            else:
+                st.error("✗ LANDINGAI_API_KEY not set")
+                st.info("Set the LANDINGAI_API_KEY environment variable to use LandingAI.")
 
         st.divider()
 
@@ -304,7 +323,8 @@ def render_sidebar():
             "min_year": min_year,
             "max_year": max_year,
             "use_cache": use_cache,
-            "force_reparse": force_reparse if use_cache else True
+            "force_reparse": force_reparse if use_cache else True,
+            "processor": processor_key
         }
 
 
@@ -629,7 +649,8 @@ async def process_documents(file_paths: List[str], settings: dict):
     pipeline = LoanProcessingPipeline(
         min_year=settings["min_year"],
         max_year=settings["max_year"],
-        use_cache=settings.get("use_cache", True)
+        use_cache=settings.get("use_cache", True),
+        processor=settings.get("processor", "landingai")
     )
 
     # Override validator settings
@@ -666,11 +687,13 @@ def main():
     # Render sidebar and get settings
     settings = render_sidebar()
 
-    # Check API key
-    if not check_api_key():
+    # Check API key for selected processor
+    selected_processor = settings.get("processor", "landingai")
+    if not check_api_key(selected_processor):
+        key_name = "REDUCTO_API_KEY" if selected_processor == "reducto" else "LANDINGAI_API_KEY"
         st.warning(
-            "⚠️ LANDINGAI_API_KEY not configured. "
-            "Please set this environment variable to use the loan processor."
+            f"⚠️ {key_name} not configured. "
+            f"Please set this environment variable to use the loan processor with {selected_processor}."
         )
 
     # Main content area
@@ -724,8 +747,9 @@ def main():
             st.rerun()
 
     if process_button:
-        if not check_api_key():
-            st.error("Cannot process: LANDINGAI_API_KEY not configured")
+        if not check_api_key(selected_processor):
+            key_name = "REDUCTO_API_KEY" if selected_processor == "reducto" else "LANDINGAI_API_KEY"
+            st.error(f"Cannot process: {key_name} not configured")
             return
 
         with st.spinner(f"Processing {len(file_paths)} documents..."):

@@ -131,22 +131,30 @@ class LoanProcessingPipeline:
         min_year: Optional[int] = None,
         max_year: Optional[int] = None,
         cache_dir: Optional[Union[str, Path]] = None,
-        use_cache: bool = True
+        use_cache: bool = True,
+        processor: str = "landingai"
     ):
         """Initialize the pipeline.
 
         Args:
-            api_key: LandingAI API key. Defaults to LANDINGAI_API_KEY env var.
+            api_key: API key for the selected processor. Defaults to env var.
             min_year: Minimum acceptable year for documents
             max_year: Maximum acceptable year for documents
             cache_dir: Directory to store parsed document cache. Defaults to "parsed/"
             use_cache: Whether to use caching for parsed documents. Defaults to True.
+            processor: Which processor to use - "landingai" or "reducto". Default is "landingai".
         """
-        from src.landingai_stack.client import ADEClient
+        self.processor_name = processor
 
-        self.client = ADEClient(api_key=api_key)
-        self.categorizer = LoanDocumentCategorizer(api_key=api_key)
-        self.extractor = LoanFieldExtractor(api_key=api_key)
+        if processor == "reducto":
+            from src.reducto_stack.client import ReductoClient
+            self.client = ReductoClient(api_key=api_key)
+        else:
+            from src.landingai_stack.client import ADEClient
+            self.client = ADEClient(api_key=api_key)
+
+        self.categorizer = LoanDocumentCategorizer(api_key=api_key, processor=processor)
+        self.extractor = LoanFieldExtractor(api_key=api_key, processor=processor)
         self.validator = LoanValidator(min_year=min_year, max_year=max_year)
         self.visualizer = DocumentVisualizer()
 
@@ -262,8 +270,13 @@ class LoanProcessingPipeline:
                 return cached
 
         # Parse the document
-        logger.info(f"Parsing document (API call): {file_path}")
-        result = await self.client.parse(file_path=file_path)
+        logger.info(f"Parsing document (API call) with {self.processor_name}: {file_path}")
+        if self.processor_name == "reducto":
+            from src.reducto_stack.parser import ReductoParseWrapper
+            parser = ReductoParseWrapper(client=self.client)
+            result = await parser.parse(file_path=file_path)
+        else:
+            result = await self.client.parse(file_path=file_path)
         markdown = result.get("markdown", "")
 
         logger.info(f"Parsed {len(markdown)} characters from {file_path.name}")

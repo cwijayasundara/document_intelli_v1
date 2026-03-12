@@ -63,14 +63,20 @@ def pydantic_to_json_schema(model: Type[BaseModel]) -> Dict[str, Any]:
 class LoanFieldExtractor:
     """Extracts fields from loan documents based on their type."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, processor: str = "landingai"):
         """Initialize the extractor.
 
         Args:
-            api_key: LandingAI API key. Defaults to LANDINGAI_API_KEY env var.
+            api_key: API key for the selected processor. Defaults to env var.
+            processor: Which processor to use - "landingai" or "reducto".
         """
-        from src.landingai_stack.client import ADEClient
-        self.client = ADEClient(api_key=api_key)
+        self.processor_name = processor
+        if processor == "reducto":
+            from src.reducto_stack.client import ReductoClient
+            self.client = ReductoClient(api_key=api_key)
+        else:
+            from src.landingai_stack.client import ADEClient
+            self.client = ADEClient(api_key=api_key)
 
     async def extract(
         self,
@@ -109,66 +115,85 @@ class LoanFieldExtractor:
         logger.debug(f"Using JSON schema: {json_schema}")
 
         try:
-            # Use ADE extract with the type-specific schema
-            result = await self.client.extract(
-                content=markdown_content or "",
-                schema=json_schema,
-                file_path=file_path
-            )
-
-            logger.debug(f"Extraction result: {result}")
-
-            # Parse the result - SDK returns data under 'extraction' key
-            if "extraction" in result:
-                fields = result["extraction"]
-            elif "data" in result:
-                fields = result["data"]
-            elif "error" in result and result["error"]:
+            if self.processor_name == "reducto":
+                # Reducto extracts from the uploaded file directly (server-side)
+                from src.reducto_stack.extractor import ReductoExtractWrapper
+                extractor = ReductoExtractWrapper(client=self.client)
+                result_obj = await extractor.extract(
+                    content=markdown_content or "",
+                    schema=json_schema,
+                    file_path=file_path
+                )
+                cleaned_fields = {k: v for k, v in result_obj.fields.items() if v is not None}
+                logger.info(f"Extracted {len(cleaned_fields)} fields from {document_type.value}")
                 return DocumentExtractionResult(
                     document_type=document_type,
-                    confidence=0.0,
-                    fields={},
-                    raw_response=result,
+                    confidence=1.0 if cleaned_fields else 0.0,
+                    fields=cleaned_fields,
                     file_path=str(file_path),
-                    file_name=file_path.name,
-                    error=result["error"]
+                    file_name=file_path.name
                 )
             else:
-                # Assume the result itself is the extracted data
-                fields = {k: v for k, v in result.items() if k not in ["error", "grounding", "extraction_metadata", "metadata"]}
+                # Use ADE extract with the type-specific schema
+                result = await self.client.extract(
+                    content=markdown_content or "",
+                    schema=json_schema,
+                    file_path=file_path
+                )
 
-            # Extract grounding/references if available
-            grounding = result.get("grounding", [])
+                logger.debug(f"Extraction result: {result}")
 
-            # extraction_metadata contains reference info but in dict format, not list
-            # Convert to list format if needed for compatibility
-            if not grounding and "extraction_metadata" in result:
-                extraction_meta = result["extraction_metadata"]
-                # Convert dict to list of grounding items
-                grounding_list = []
-                for field_name, field_meta in extraction_meta.items():
-                    if isinstance(field_meta, dict) and "references" in field_meta:
-                        grounding_list.append({
-                            "field": field_name,
-                            "value": field_meta.get("value"),
-                            "references": field_meta.get("references", [])
-                        })
-                grounding = grounding_list if grounding_list else None
+                # Parse the result - SDK returns data under 'extraction' key
+                if "extraction" in result:
+                    fields = result["extraction"]
+                elif "data" in result:
+                    fields = result["data"]
+                elif "error" in result and result["error"]:
+                    return DocumentExtractionResult(
+                        document_type=document_type,
+                        confidence=0.0,
+                        fields={},
+                        raw_response=result,
+                        file_path=str(file_path),
+                        file_name=file_path.name,
+                        error=result["error"]
+                    )
+                else:
+                    # Assume the result itself is the extracted data
+                    fields = {k: v for k, v in result.items() if k not in ["error", "grounding", "extraction_metadata", "metadata"]}
 
-            # Clean up null/None values
-            cleaned_fields = {k: v for k, v in fields.items() if v is not None}
+                # Extract grounding/references if available
+                grounding = result.get("grounding", [])
 
-            logger.info(f"Extracted {len(cleaned_fields)} fields from {document_type.value}")
+                # extraction_metadata contains reference info but in dict format, not list
+                # Convert to list format if needed for compatibility
+                if not grounding and "extraction_metadata" in result:
+                    extraction_meta = result["extraction_metadata"]
+                    # Convert dict to list of grounding items
+                    grounding_list = []
+                    for field_name, field_meta in extraction_meta.items():
+                        if isinstance(field_meta, dict) and "references" in field_meta:
+                            grounding_list.append({
+                                "field": field_name,
+                                "value": field_meta.get("value"),
+                                "references": field_meta.get("references", [])
+                            })
+                    grounding = grounding_list if grounding_list else None
 
-            return DocumentExtractionResult(
-                document_type=document_type,
-                confidence=1.0 if cleaned_fields else 0.0,
-                fields=cleaned_fields,
-                raw_response=result,
-                grounding=grounding if grounding else None,
-                file_path=str(file_path),
-                file_name=file_path.name
-            )
+                # Clean up null/None values
+                cleaned_fields = {k: v for k, v in fields.items() if v is not None}
+
+                logger.info(f"Extracted {len(cleaned_fields)} fields from {document_type.value}")
+
+                return DocumentExtractionResult(
+                    document_type=document_type,
+                    confidence=1.0 if cleaned_fields else 0.0,
+                    fields=cleaned_fields,
+                    raw_response=result,
+                    grounding=grounding if grounding else None,
+                    file_path=str(file_path),
+                    file_name=file_path.name
+                )
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}")
@@ -200,15 +225,25 @@ class LoanFieldExtractor:
         logger.info(f"Extracting with custom schema from: {file_path}")
 
         try:
-            result = await self.client.extract(
-                content=markdown_content or "",
-                schema=json_schema,
-                file_path=file_path
-            )
+            if self.processor_name == "reducto":
+                from src.reducto_stack.extractor import ReductoExtractWrapper
+                extractor = ReductoExtractWrapper(client=self.client)
+                result_obj = await extractor.extract(
+                    content=markdown_content or "",
+                    schema=json_schema,
+                    file_path=file_path
+                )
+                return result_obj.fields
+            else:
+                result = await self.client.extract(
+                    content=markdown_content or "",
+                    schema=json_schema,
+                    file_path=file_path
+                )
 
-            if "data" in result:
-                return result["data"]
-            return result
+                if "data" in result:
+                    return result["data"]
+                return result
 
         except Exception as e:
             logger.error(f"Custom extraction failed: {e}")

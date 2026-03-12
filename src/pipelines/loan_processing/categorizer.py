@@ -41,16 +41,22 @@ class CategorizationSchema(BaseModel):
 
 
 class LoanDocumentCategorizer:
-    """Categorizes loan documents using LandingAI ADE."""
+    """Categorizes loan documents using LandingAI ADE or Reducto."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, processor: str = "landingai"):
         """Initialize the categorizer.
 
         Args:
-            api_key: LandingAI API key. Defaults to LANDINGAI_API_KEY env var.
+            api_key: API key for the selected processor. Defaults to env var.
+            processor: Which processor to use - "landingai" or "reducto".
         """
-        from src.landingai_stack.client import ADEClient
-        self.client = ADEClient(api_key=api_key)
+        self.processor_name = processor
+        if processor == "reducto":
+            from src.reducto_stack.client import ReductoClient
+            self.client = ReductoClient(api_key=api_key)
+        else:
+            from src.landingai_stack.client import ADEClient
+            self.client = ADEClient(api_key=api_key)
 
     async def categorize(
         self,
@@ -99,25 +105,36 @@ class LoanDocumentCategorizer:
         }
 
         try:
-            # Use ADE extract with the categorization schema
-            result = await self.client.extract(
-                content=markdown_content or "",
-                schema=json_schema,
-                file_path=file_path
-            )
-
-            logger.debug(f"Categorization result: {result}")
-
-            # Parse the result - SDK returns data under 'extraction' key
-            if "extraction" in result:
-                data = result["extraction"]
-            elif "data" in result:
-                data = result["data"]
-            elif "document_type" in result:
-                data = result
+            if self.processor_name == "reducto":
+                # Reducto extracts from the uploaded file directly
+                from src.reducto_stack.extractor import ReductoExtractWrapper
+                extractor = ReductoExtractWrapper(client=self.client)
+                result_obj = await extractor.extract(
+                    content=markdown_content or "",
+                    schema=json_schema,
+                    file_path=file_path
+                )
+                data = result_obj.fields
             else:
-                logger.warning(f"Unexpected categorization result format: {result}")
-                return LoanDocumentType.UNKNOWN, 0.0, "Failed to parse categorization result"
+                # Use ADE extract with the categorization schema
+                result = await self.client.extract(
+                    content=markdown_content or "",
+                    schema=json_schema,
+                    file_path=file_path
+                )
+
+                logger.debug(f"Categorization result: {result}")
+
+                # Parse the result - SDK returns data under 'extraction' key
+                if "extraction" in result:
+                    data = result["extraction"]
+                elif "data" in result:
+                    data = result["data"]
+                elif "document_type" in result:
+                    data = result
+                else:
+                    logger.warning(f"Unexpected categorization result format: {result}")
+                    return LoanDocumentType.UNKNOWN, 0.0, "Failed to parse categorization result"
 
             # Extract values
             doc_type_str = data.get("document_type", "unknown")
