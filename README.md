@@ -1,6 +1,6 @@
 # Document Extraction Pipeline
 
-A multi-stack document parsing and extraction platform that provides comparative evaluation between **LlamaIndex** and **LandingAI** commercial APIs, with **Gemini** integration for handwriting recognition.
+A multi-stack document parsing and extraction platform that provides comparative evaluation between **LlamaIndex**, **LandingAI**, and **Reducto** commercial APIs, with **Gemini** integration for handwriting recognition.
 
 ## Overview
 
@@ -12,15 +12,240 @@ This pipeline processes documents through multiple stages:
 
 ## Features
 
-| Feature | LlamaIndex | LandingAI | Gemini |
-|---------|------------|-----------|--------|
-| PDF Parsing | ✅ | ✅ | ✅ |
-| Image Parsing | ✅ | ✅ | ✅ |
-| Classification | ✅ Native | ✅ Inferred | ✅ Prompt-based |
-| Schema Extraction | ✅ Pydantic | ✅ JSON Schema | ✅ Prompt-based |
-| Semantic Chunking | ✅ | ✅ | ❌ |
-| Grounding/BBox | Partial | ✅ | ❌ |
-| Handwriting OCR | ✅ | Unknown | ✅ Specialized |
+| Feature | LlamaIndex | LandingAI | Reducto | Azure Doc Intelligence | Gemini |
+|---------|------------|-----------|---------|----------------------|--------|
+| PDF Parsing | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Image Parsing | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Classification | ✅ Native | ✅ Inferred | ✅ Inferred (block types) | ✅ Prebuilt + custom | ✅ Prompt-based |
+| Schema Extraction | ✅ Pydantic | ✅ JSON Schema | ✅ JSON Schema | ✅ Prebuilt models + custom | ✅ Prompt-based |
+| Semantic Chunking | ✅ | ✅ | ✅ (section + variable) | ✅ (paragraphs, sections) | ❌ |
+| Grounding/BBox | Partial | ✅ | ✅ (per-block) | ✅ (word + line + paragraph) | ❌ |
+| Handwriting OCR | ✅ | Unknown | ✅ (agentic text) | ✅ Native | ✅ Specialized |
+| DOCX/PPTX Support | ✅ | ✅ (converted to PDF internally) | ✅ | ✅ | ❌ |
+| Spreadsheet Support | ✅ (XLSX, CSV, XLS, TSV) | ✅ (XLSX, CSV) | ✅ (XLSX, CSV) | ✅ (XLSX) | ❌ |
+| Audio Transcription | ✅ (MP3, WAV, MP4) | ❌ | ❌ | ❌ | ❌ |
+
+## Stack Comparison
+
+### Comprehensive Comparison: LlamaIndex vs LandingAI vs Reducto vs Azure Document Intelligence
+
+> **Note:** Azure Document Intelligence (formerly Azure Form Recognizer) is included for reference as a leading hyperscaler solution commonly evaluated by enterprise customers. It is **not implemented** in this pipeline but is shown here to help teams make informed build-vs-buy decisions.
+
+#### Document Parsing
+
+| Aspect | LlamaIndex (LlamaParse) | LandingAI (ADE Parse) | Reducto (Parse) | Azure Doc Intelligence |
+|--------|------------------------|----------------------|-----------------|----------------------|
+| **Output Format** | Markdown (direct) | Markdown (direct) | Blocks → assembled to markdown | Structured JSON with content + roles |
+| **Parsing Tiers** | 4 tiers (cost_effective, agentic, agentic_plus, fast) | Single tier | Single tier with agentic enhancement | Prebuilt models + custom models |
+| **Multimodal** | Optional (2x credits) | Built-in | Built-in with figure summarization | Built-in (vision + OCR fused) |
+| **Table Handling** | Markdown tables | Markdown tables | Configurable (HTML, markdown, JSON, CSV) | Structured cells with row/col spans, headers, bounding boxes |
+| **Figure Handling** | Extracted as images | Extracted with metadata | Extracted + optional AI summarization | Extracted with captions and bounding regions |
+| **OCR Quality** | Good, improves with higher tiers | Good | Hybrid mode (OCR + embedded text) | Excellent — enterprise-grade OCR with 300+ language support |
+| **Page-Level Output** | ✅ Per-page markdown | ✅ Per-page segments | ✅ Page markers + block-level pages | ✅ Per-page with word/line/paragraph hierarchy |
+| **Processing Speed** | Varies by tier (fast ~2s, agentic ~10s) | ~5-8s per page | ~3-6s per page | Varies by model and document complexity |
+| **Scanned Docs** | Supported via multimodal tier | Supported | Enhanced via agentic text correction | Excellent — purpose-built for scanned docs |
+| **Output Granularity** | Page-level chunks | Document-level markdown + chunks | Block-level (Title, Text, Table, Figure, Key Value) | Word → line → paragraph → section hierarchy |
+
+#### Structured Extraction
+
+| Aspect | LlamaIndex (LlamaExtract) | LandingAI (ADE Extract) | Reducto (Extract) | Azure Doc Intelligence |
+|--------|--------------------------|------------------------|-------------------|----------------------|
+| **Input** | Markdown text | Markdown text | Uploaded document (file-based) | Uploaded document (file or URL) |
+| **Schema Format** | Pydantic models | JSON Schema string | JSON Schema | Prebuilt schemas + custom trained models |
+| **Auto-Extraction** | ✅ (detect fields without schema) | ❌ | ❌ | ✅ (prebuilt models for invoices, receipts, IDs, W-2s, etc.) |
+| **Extraction Modes** | 4 modes (fast, balanced, premium, multimodal) | Single mode | Single mode with parsing config | Prebuilt, custom, composed models |
+| **Field Confidence** | Per-field confidence scores | Per-field confidence | Per-field (via block confidence) | ✅ Per-field confidence (0-1) |
+| **Grounding** | Not available | ✅ Per-field bounding boxes | ✅ Via block bounding boxes | ✅ Per-field bounding regions with polygon coordinates |
+| **Nested Objects** | ✅ | ✅ | ✅ | ✅ (via composed/custom models) |
+| **List Fields** | ✅ | ✅ | ✅ | ✅ (line items in invoices, etc.) |
+| **Citation Support** | ❌ | ❌ | ✅ (configurable) | ✅ (spans reference source content) |
+| **Prebuilt Doc Types** | ❌ | ❌ | ❌ | ✅ Invoice, receipt, ID, W-2, health insurance, US tax forms, contract, US mortgage, marriage certificate, credit/debit card, business card, pay stub, bank statement |
+
+#### Semantic Splitting / Chunking
+
+| Aspect | LlamaIndex (LlamaSplit) | LandingAI (ADE Split) | Reducto (Split) | Azure Doc Intelligence |
+|--------|------------------------|----------------------|-----------------|----------------------|
+| **API-Based** | ❌ (local rule-based) | ✅ | ✅ | ✅ (Layout model) |
+| **Chunk Modes** | Header-based + size limits | Category-based | Section-based with descriptions | Paragraph, section heading, page-based |
+| **Category Classification** | Keyword matching | API-powered | AI-powered with confidence | Role-based (title, sectionHeading, pageHeader, pageFooter, footnote) |
+| **Custom Categories** | ✅ | ✅ | ✅ (name + description pairs) | ❌ (fixed roles from Layout model) |
+| **Overlap Support** | ✅ Configurable | ❌ | ✅ (variable mode) | ❌ (structural boundaries) |
+| **Page Mapping** | ❌ | ✅ | ✅ (pages per split) | ✅ (page number + bounding regions) |
+| **Confidence Scores** | ❌ | ✅ | ✅ (high/low) | ✅ (per-element confidence) |
+| **Chunking Strategies** | Header-based, paragraph | Category-based | variable, section, page, block, page_sections | Paragraph, section, table, figure (structural) |
+
+#### Document Classification
+
+| Aspect | LlamaIndex (LlamaClassify) | LandingAI | Reducto | Azure Doc Intelligence |
+|--------|---------------------------|-----------|---------|----------------------|
+| **Dedicated API** | ✅ | ❌ | ❌ | ✅ (Custom classification model) |
+| **Method** | Native classifier API | Inferred from split categories | Inferred from block type frequency | Custom-trained classifier or prebuilt model routing |
+| **Confidence** | Returns confidence scores (often low 3-5%) | Calculated from category distribution | Calculated from block type ratios | Per-class confidence scores |
+| **Custom Labels** | ✅ With descriptions | ✅ Via split categories | ✅ Via keyword rules | ✅ Custom-trained with labeled samples |
+| **Multimodal** | ✅ (fast or multimodal mode) | ❌ | ❌ (uses parsed content) | ✅ (visual + text features) |
+| **Fallback** | Keyword-based if API fails | Always keyword/category | Block-type → keyword fallback | N/A (model-based) |
+| **Training Required** | ❌ | ❌ | ❌ | ✅ (minimum 5 samples per class) |
+
+#### Grounding & Traceability
+
+| Aspect | LlamaIndex | LandingAI | Reducto | Azure Doc Intelligence |
+|--------|------------|-----------|---------|----------------------|
+| **Bounding Boxes** | Partial (items only) | ✅ Full document | ✅ Per-block | ✅ Word, line, paragraph, field-level polygons |
+| **Coordinate System** | Varies | Absolute pixels | Normalized (0-1) | Points-based polygons (inches from origin) |
+| **Page Reference** | ✅ | ✅ | ✅ (1-indexed) | ✅ (1-indexed with page dimensions) |
+| **Block Type Labels** | ❌ | ❌ | ✅ (Title, Table, Figure, Key Value, etc.) | ✅ (paragraph roles: title, sectionHeading, header, footer, footnote, pageNumber) |
+| **Visual Debugger** | ❌ | ❌ | ✅ (Studio Link) | ✅ (Document Intelligence Studio — label, train, test in browser) |
+| **Confidence Per Block** | ❌ | ✅ | ✅ (high/low) | ✅ (0-1 float per word, line, field) |
+| **Selection Marks** | ❌ | ❌ | ❌ | ✅ (checkbox/radio detection with selected/unselected state) |
+
+#### Cost & Pricing
+
+| Operation | LlamaIndex | LandingAI | Reducto | Azure Doc Intelligence |
+|-----------|------------|-----------|---------|----------------------|
+| **Pricing Model** | Credit-based (per page) | Per-page | Credit-based (per page) | Per-page (tiered by volume) |
+| **Parse (per 1K pages)** | ~$10 (agentic), ~$20 (agentic_plus) | ~$8 | ~$5-10 (varies by features) | $1.50 (Read), $10 (Layout), $15 (prebuilt) |
+| **Extract (per 1K pages)** | ~$5 | ~$4 | Included with parse or ~$5 | Included in prebuilt/custom model pricing |
+| **Split (per 1K pages)** | Free (local) | ~$3 | ~$3 | Included in Layout model pricing |
+| **Classify (per 1K pages)** | ~$1 | Free (inferred) | Free (inferred) | $10 (custom classification model) |
+| **Credit Tracking** | ✅ (1-2 credits/page) | ❌ | ✅ (credits reported per call) | ✅ (Azure Cost Management + usage metrics) |
+| **Free Tier** | Limited | Limited | Limited | ✅ 500 pages/month free (all prebuilt models) |
+| **Agentic Enhancement** | Higher tier = more cost | N/A | Additional cost per enhanced block | N/A (model-based quality tiers) |
+| **Enterprise Agreements** | ❌ | ❌ | ❌ | ✅ (Azure EA, CSP, PAYG, reserved capacity) |
+
+#### SDK & Integration
+
+| Aspect | LlamaIndex | LandingAI | Reducto | Azure Doc Intelligence |
+|--------|------------|-----------|---------|----------------------|
+| **Python SDK** | `llama-cloud` | `landingai-ade` | `reductoai` | `azure-ai-documentintelligence` |
+| **SDK Style** | Sync | Sync | Sync | Sync + native async (`aio` client) |
+| **Async Support** | Wrapped with `to_thread` | Direct (some methods) | Wrapped with `to_thread` | Native async client (`DocumentIntelligenceClient` from `aio`) |
+| **Authentication** | `LLAMA_CLOUD_API_KEY` env var | `LANDINGAI_API_KEY` env var | `REDUCTO_API_KEY` env var | Azure AD (Entra ID), API key, or managed identity |
+| **File Upload** | Inline (pass bytes) | Inline (pass tuple) | Two-step (upload → process) | Inline (bytes/stream) or URL |
+| **Region Support** | Single | US / EU | Single | 30+ Azure regions worldwide |
+| **Batch Processing** | ✅ | ✅ | ✅ (multi-URL input) | ✅ (Batch API for large volumes) |
+| **Async/Webhook** | ❌ | ❌ | ✅ (webhook callbacks) | ✅ (long-running operations with polling) |
+| **IAM / RBAC** | API key only | API key only | API key only | ✅ Azure RBAC, private endpoints, VNet, managed identity |
+| **Compliance** | Varies | SOC 2 | Varies | ✅ SOC 1/2/3, ISO 27001, HIPAA BAA, FedRAMP, PCI DSS |
+| **On-Premises** | ❌ | ❌ | ❌ | ✅ (disconnected containers for air-gapped environments) |
+
+#### Strengths & Best Use Cases
+
+| Stack | Best For | Key Strengths | Limitations |
+|-------|----------|---------------|-------------|
+| **LlamaIndex** | General-purpose parsing with tiered quality control | Multiple parsing tiers, native classification, auto-extraction without schema, 50+ file formats (incl. Office, audio), strong ecosystem | Lower classification confidence, no native grounding, higher cost at premium tiers |
+| **LandingAI** | Documents needing grounding/audit trails | Full bounding box grounding, region support (US/EU), integrated parse→extract flow, DOCX/PPTX support | No dedicated classification API, limited chunking options |
+| **Reducto** | Complex documents needing block-level analysis | Block-type detection, configurable table output, visual debugger (Studio), DOCX/PPTX support, agentic text correction | Two-step upload flow, extract requires file (not text), newer SDK |
+| **Azure Doc Intelligence** | Enterprise/regulated environments, high-volume production | ~22 prebuilt doc types, enterprise auth (Entra ID/RBAC), on-premises containers, 300+ language OCR, HIPAA/FedRAMP/PCI compliance, Azure ecosystem integration, 500 free pages/month | Requires Azure subscription, custom models need training data, less flexible schema definition (no arbitrary JSON schema), higher learning curve |
+
+#### Recommendation Matrix
+
+| Document Type | Recommended Stack | Reason |
+|--------------|-------------------|--------|
+| **Standard PDFs** | Any | All handle well |
+| **Scanned/OCR docs** | Azure or Reducto | Azure has best-in-class OCR; Reducto has agentic correction |
+| **Forms with checkboxes** | Azure or LandingAI | Azure detects selection marks natively; LandingAI has strong grounding |
+| **Financial tables** | Azure or Reducto | Azure has prebuilt invoice/receipt models; Reducto has configurable output |
+| **DOCX/PPTX files** | LlamaIndex, Reducto, LandingAI, or Azure | All four support Office formats (LandingAI converts to PDF internally) |
+| **Visual documents** | LlamaIndex (agentic_plus) | Best multimodal tier options |
+| **Audit/compliance** | Azure | SOC, HIPAA, FedRAMP, PCI DSS compliance; audit logs via Azure Monitor |
+| **Budget-conscious** | Azure (free tier) or LlamaIndex (cost_effective) | Azure: 500 free pages/month; LlamaIndex: cheapest paid tier |
+| **Handwritten content** | Azure or Gemini | Azure has native handwriting OCR; Gemini excels at math handwriting |
+| **Enterprise / regulated** | Azure | RBAC, private endpoints, managed identity, on-premises containers, enterprise agreements |
+| **US tax forms (W-2, 1098, 1099)** | Azure | Purpose-built prebuilt models with field-level extraction |
+| **Identity documents** | Azure | Prebuilt ID model supports passports, driver's licenses, 150+ countries |
+| **Rapid prototyping** | LlamaIndex or Reducto | Simplest API key setup, no cloud subscription needed |
+| **Air-gapped / offline** | Azure | Only option with disconnected container deployment |
+
+#### Large Document Handling (200+ Pages)
+
+> **Problem:** A 200-300 page document produces ~200K-500K+ tokens of markdown. Most LLM-backed extraction APIs have context limits of 100K-200K tokens. Sending the full markdown to an LLM for schema-based extraction will **fail, truncate, or produce incomplete results**.
+
+| Aspect | LlamaIndex | LandingAI | Reducto | Azure Doc Intelligence |
+|--------|------------|-----------|---------|----------------------|
+| **Parsing (200-300pp)** | ✅ Server-side, no page limit in code | ✅ Server-side, no page limit in code | ✅ Server-side, no page limit in code | ✅ Server-side, up to 2000 pages |
+| **Extraction input** | Full markdown text → LLM | Full markdown text → LLM | Uploaded file ref (server-side) | Uploaded file (server-side) |
+| **Token limit risk** | 🔴 HIGH — entire markdown sent as `text=` param | 🔴 HIGH — entire markdown sent as `markdown=` param | 🟢 LOW — server processes the file directly | 🟢 LOW — prebuilt models process natively |
+| **Chunked extraction** | ❌ Not implemented | ❌ Not implemented | N/A (server handles internally) | N/A (server handles internally) |
+| **Max extraction context** | ~100K-200K tokens (API-dependent) | ~100K-200K tokens (API-dependent) | File-based (no token limit) | File-based (no token limit) |
+| **Schema derivation** | ⚠️ Truncated to first ~15K chars (~5-10 pages) | ⚠️ Same (shared component) | ⚠️ Same (shared component) | N/A (prebuilt schemas) |
+| **Page-level extraction** | ❌ No page attribution | Partial | ✅ Block-level page refs | ✅ Word/line/field page refs |
+| **Splitting large docs** | ✅ Local (no API cost) | ✅ Server-side | ✅ Server-side | ✅ Layout model |
+
+##### Extraction Strategies for Large Documents
+
+The core challenge: **you need structured data from a 300-page document, but the LLM can only see ~50-100 pages at once**. Here are the viable strategies, ranked by complexity:
+
+**Strategy 1: File-Based Extraction (Recommended for structured docs)**
+- Use APIs that extract directly from the uploaded file, not from text
+- **Reducto Extract** and **Azure prebuilt models** both operate on the file server-side — the API handles pagination internally
+- Best for: invoices, forms, contracts, tax documents, any document with a known schema
+- Limitation: you're dependent on the API's extraction quality; no prompt engineering possible
+
+**Strategy 2: Chunked Extraction (Map-Reduce)**
+- Parse document → split into chunks → extract from each chunk independently → merge results
+- Each chunk stays within LLM token limits
+- Works with any LLM-backed extraction API (LlamaIndex, LandingAI, or direct OpenAI/Anthropic calls)
+- Best for: documents where target fields are scattered across pages (e.g., a 300-page contract with clauses on different pages)
+- Limitation: fields that span multiple chunks may be missed; merge logic can be complex for nested/list fields
+```
+Pipeline: Parse → Split(~2K tokens/chunk) → Extract(chunk₁) + Extract(chunk₂) + ... → Merge
+```
+
+**Strategy 3: RAG-Based Extraction (Recommended for sparse extraction)**
+- Parse document → embed chunks into vector store → for each schema field, retrieve top-K relevant chunks → extract from retrieved context only
+- Only sends relevant chunks to the LLM, not the entire document
+- Best for: extracting a small number of specific fields from a very large document (e.g., "find the total contract value" from a 300-page agreement)
+- Limitation: requires vector store infrastructure; retrieval quality affects extraction accuracy
+```
+Pipeline: Parse → Embed(chunks) → VectorStore
+          For each field: Query(field_description) → Retrieve(top-K) → Extract(context)
+```
+
+**Strategy 4: Hierarchical Extraction (Two-Pass)**
+- First pass: extract a table of contents / section index from the document
+- Second pass: for each section relevant to your schema, extract targeted fields
+- Best for: well-structured documents (reports, filings, manuals) where you know fields live in specific sections
+- Limitation: requires documents with clear section structure
+
+**Strategy 5: Agent-Driven Extraction (Most flexible, highest cost)**
+- An LLM agent iteratively reads pages/sections, decides what to extract, and builds up the result
+- The agent can ask follow-up questions like "I found a reference to Amendment 3 on page 45 — let me go read it"
+- Best for: complex documents requiring cross-referencing (e.g., legal contracts with amendments, financial filings with footnotes)
+- Limitation: highest cost (many LLM calls); slowest; harder to make deterministic
+
+##### When to Use What
+
+| Scenario | Recommended Strategy | Why |
+|----------|---------------------|-----|
+| **Known schema, structured doc** (invoice, form, tax) | File-based (Reducto/Azure) | API handles pagination natively, no token limit |
+| **Known schema, unstructured doc** (contract, report) | Chunked extraction (map-reduce) | Fields scattered across pages; each chunk fits in context |
+| **Few fields from large doc** (find 5 values in 300 pages) | RAG-based extraction | Only retrieves relevant pages; most token-efficient |
+| **Well-structured doc** (manual, filing, spec) | Hierarchical (two-pass) | Section index narrows search space |
+| **Complex cross-referencing** (legal, financial) | Agent-driven | Needs reasoning across non-adjacent sections |
+| **Unknown schema** (auto-derive fields) | RAG + schema derivation | Sample multiple sections (not just first 15K chars) |
+
+##### Practical Token Budget Estimates
+
+| Document Size | Approx. Markdown Tokens | Fits in GPT-4o (128K)? | Fits in Claude (200K)? | Fits in Gemini 1.5 Pro (1M)? |
+|--------------|------------------------|----------------------|----------------------|------------------------------|
+| 10 pages | ~5K-15K | ✅ | ✅ | ✅ |
+| 50 pages | ~25K-75K | ✅ (tight) | ✅ | ✅ |
+| 100 pages | ~50K-150K | ⚠️ May exceed | ✅ (tight) | ✅ |
+| 200 pages | ~100K-300K | ❌ Likely exceeds | ⚠️ May exceed | ✅ |
+| 300 pages | ~150K-500K | ❌ Exceeds | ❌ Likely exceeds | ✅ (tight) |
+| 500+ pages | ~250K-800K+ | ❌ | ❌ | ⚠️ May exceed |
+
+> **Note:** Token counts vary significantly based on document density. A text-heavy academic paper produces ~1K-2K tokens/page, while a form with sparse fields produces ~200-500 tokens/page. Tables and images (as markdown) can be especially token-dense.
+
+##### Recommendations for This Pipeline
+
+For 200-300 page documents in the current pipeline:
+
+1. **Reducto is the safest choice** — extraction operates on the uploaded file, so no token limit applies to the extraction step
+2. **For LlamaIndex/LandingAI extraction**, implement chunked extraction: parse → split into ~2K-token chunks → extract per chunk → merge results
+3. **Schema derivation** (auto-derive fields) currently only sees the first ~15K characters — for large docs, sample from multiple sections or use a table-of-contents approach
+4. **Consider RAG** if you only need a handful of fields from a large document — it's more token-efficient than extracting from every chunk
+5. **Gemini 1.5 Pro's 1M token context** can handle most 200-300 page documents in a single call, but at higher cost and latency
 
 ## Installation
 
@@ -55,6 +280,10 @@ LLAMA_CLOUD_API_KEY=your_key_here
 # LandingAI API Key (for LandingAI ADE stack)
 # Get from: https://landing.ai
 LANDINGAI_API_KEY=your_key_here
+
+# Reducto API Key (for Reducto stack)
+# Get from: https://reducto.ai
+REDUCTO_API_KEY=your_key_here
 
 # Google AI API Key (for Gemini handwriting processing)
 # Get from: https://aistudio.google.com
@@ -97,6 +326,7 @@ The app will open in your browser at `http://localhost:8501`.
 **2. Processor Selection** (Sidebar)
 - **LlamaIndex**: Uses LlamaParse, LlamaClassify, LlamaExtract
 - **LandingAI**: Uses ADE Parse, Extract, Split
+- **Reducto**: Uses Reducto Parse, Extract, Split
 
 **3. Operations** (Sidebar)
 - **Parse**: Convert document to markdown
@@ -180,6 +410,9 @@ result = await process_document("invoice.pdf", stack="llamaindex")
 # LandingAI stack
 result = await process_document("form.pdf", stack="landingai")
 
+# Reducto stack
+result = await process_document("report.pdf", stack="reducto")
+
 # Gemini for handwriting
 result = await process_document("handwritten.jpg", stack="gemini")
 ```
@@ -209,7 +442,7 @@ from main import compare_stacks
 
 report = await compare_stacks(
     ["doc1.pdf", "doc2.pdf", "doc3.pdf"],
-    stacks=["llamaindex", "landingai"]
+    stacks=["llamaindex", "landingai", "reducto"]
 )
 
 # Print comparison report
@@ -244,6 +477,13 @@ doc_extraction_pipeline/
 │   │   ├── parser.py          # ADE Parse wrapper
 │   │   ├── extractor.py       # ADE Extract wrapper
 │   │   ├── splitter.py        # ADE Split wrapper
+│   │   └── processor.py       # Full pipeline
+│   │
+│   ├── reducto_stack/         # Reducto integration
+│   │   ├── client.py          # Reducto SDK client
+│   │   ├── parser.py          # Reducto Parse wrapper
+│   │   ├── extractor.py       # Reducto Extract wrapper
+│   │   ├── splitter.py        # Reducto Split wrapper
 │   │   └── processor.py       # Full pipeline
 │   │
 │   ├── gemini/                # Google Gemini integration
@@ -373,6 +613,35 @@ result = await processor.process(
 # Don't forget to close
 await processor.close()
 ```
+
+### ReductoProcessor
+
+```python
+from src.reducto_stack import ReductoProcessor
+
+processor = ReductoProcessor(api_key="optional_override")
+
+# Full pipeline
+result = await processor.process(
+    file_path="document.pdf",
+    schema=MySchema,                    # Optional extraction schema
+    classification_rules=rules,         # Optional custom rules
+    chunk_categories=["intro", "body"], # Optional chunk labels
+    include_grounding=True,             # Get bounding boxes per block
+)
+
+# Individual steps
+markdown = await processor.parse("doc.pdf")
+classification = await processor.classify(markdown, rules)
+extraction = await processor.extract(markdown, MySchema, file_path="doc.pdf")
+chunks = await processor.split(markdown, categories, file_path="doc.pdf")
+```
+
+**Key differences from other stacks:**
+- Reducto requires a two-step upload→process flow. The `ReductoProcessor.process()` method handles this automatically, uploading once and reusing the reference across parse, extract, and split.
+- Extraction operates on the uploaded file (not text), so passing `file_path` to `extract()` yields better results.
+- Classification is inferred from block-type frequency analysis (Key Value → form, Table → spreadsheet, etc.).
+- Parse output includes block-level metadata (type, bounding box, confidence) in addition to assembled markdown.
 
 ### GeminiHandwritingProcessor
 
@@ -562,17 +831,21 @@ pytest tests/ --cov=src --cov-report=html
 
 ## Supported File Formats
 
-| Format | LlamaIndex | LandingAI | Gemini |
-|--------|------------|-----------|--------|
-| PDF | ✅ | ✅ | ✅ |
-| PNG | ✅ | ✅ | ✅ |
-| JPG/JPEG | ✅ | ✅ | ✅ |
-| GIF | ✅ | ❌ | ✅ |
-| BMP | ✅ | ❌ | ✅ |
-| TIFF | ✅ | ❌ | ✅ |
-| WebP | ✅ | ❌ | ✅ |
-| XLSX | ❌ | ✅ | ❌ |
-| CSV | ❌ | ✅ | ❌ |
+| Format | LlamaIndex | LandingAI | Reducto | Azure Doc Intelligence | Gemini |
+|--------|------------|-----------|---------|----------------------|--------|
+| PDF | ✅ | ✅ | ✅ | ✅ | ✅ |
+| PNG | ✅ | ✅ | ✅ | ✅ | ✅ |
+| JPG/JPEG | ✅ | ✅ | ✅ | ✅ | ✅ |
+| GIF | ✅ | ✅ | ✅ | ❌ | ✅ |
+| BMP | ✅ | ✅ | ✅ | ✅ | ✅ |
+| TIFF | ✅ | ✅ | ✅ | ✅ | ✅ |
+| WebP | ✅ | ✅ | ❌ | ❌ | ✅ |
+| DOCX | ✅ | ✅ (→ PDF) | ✅ | ✅ | ❌ |
+| XLSX | ✅ | ✅ | ✅ | ✅ | ❌ |
+| PPTX | ✅ | ✅ (→ PDF) | ✅ | ✅ | ❌ |
+| CSV | ✅ | ✅ | ✅ | ❌ | ❌ |
+| HTML | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Audio (MP3/WAV) | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ## Cost Estimates
 
@@ -586,7 +859,17 @@ Approximate costs per 1,000 pages:
 | LlamaIndex | Extract | ~$5 |
 | LandingAI | Parse | ~$8 |
 | LandingAI | Extract | ~$4 |
+| Reducto | Parse | ~$5-10 |
+| Reducto | Extract | ~$5 |
+| Reducto | Split | ~$3 |
+| Azure | Read (OCR only) | ~$1.50 |
+| Azure | Layout (tables + structure) | ~$10 |
+| Azure | Prebuilt (invoice, receipt, etc.) | ~$15 |
+| Azure | Custom (trained models) | ~$15 |
+| Azure | Custom Classify | ~$10 |
 | Gemini Flash | Process | ~$2 |
+
+> **Azure free tier:** 500 pages/month free across all prebuilt models. Enterprise customers can negotiate volume discounts via Azure EA or reserved capacity.
 
 ## Troubleshooting
 
@@ -617,7 +900,7 @@ processor = LandingAIProcessor(timeout=300.0)  # 5 minutes
 ValueError: No processor supports file type: .docx
 ```
 
-Convert DOCX files to PDF before processing, or use a dedicated converter.
+Use the Reducto stack for DOCX/PPTX files, or convert to PDF before processing with other stacks.
 
 ### Streamlit UI Issues
 
@@ -657,7 +940,7 @@ streamlit run ui/app.py --server.runOnSave false
 
 | Setting | Location | Options |
 |---------|----------|---------|
-| Processor | Sidebar | LlamaIndex, LandingAI |
+| Processor | Sidebar | LlamaIndex, LandingAI, Reducto |
 | Operation | Sidebar | Parse, Classify, Extract, Split, Full Pipeline |
 | Parse Tier | Sidebar (Parse only) | cost_effective, agentic, agentic_plus, fast |
 | Multimodal | Sidebar (Parse only) | Enable for visual documents |
@@ -974,4 +1257,5 @@ This project is for research and evaluation purposes.
 
 - [LlamaIndex](https://www.llamaindex.ai/) - LlamaParse, LlamaExtract, LlamaClassify
 - [LandingAI](https://landing.ai/) - Agentic Document Extraction (ADE)
+- [Reducto](https://reducto.ai/) - Document parsing, extraction, and splitting
 - [Google AI](https://ai.google.dev/) - Gemini multimodal models

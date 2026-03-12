@@ -31,6 +31,7 @@ from src.common.router import DocumentRouter, ProcessorType
 from src.common.interfaces import ClassificationRule
 from src.llamaindex_stack import LlamaIndexProcessor
 from src.landingai_stack import LandingAIProcessor
+from src.reducto_stack import ReductoProcessor
 from src.gemini import GeminiHandwritingProcessor
 from src.evaluation import StackComparator, ComparisonReport, Benchmark
 
@@ -73,6 +74,8 @@ async def process_document(
         processor = LlamaIndexProcessor()
     elif stack == "landingai":
         processor = LandingAIProcessor()
+    elif stack == "reducto":
+        processor = ReductoProcessor()
     elif stack == "gemini":
         # Use Gemini for handwriting
         gemini = GeminiHandwritingProcessor()
@@ -90,7 +93,7 @@ async def process_document(
             )
         )
     else:
-        raise ValueError(f"Unknown stack: {stack}. Use 'llamaindex', 'landingai', or 'auto'")
+        raise ValueError(f"Unknown stack: {stack}. Use 'llamaindex', 'landingai', 'reducto', or 'auto'")
 
     return await processor.process(file_path, schema=schema, **options)
 
@@ -150,7 +153,7 @@ async def compare_stacks(
         ComparisonReport with detailed comparison
     """
     if stacks is None:
-        stacks = ["llamaindex", "landingai"]
+        stacks = ["llamaindex", "landingai", "reducto"]
 
     processors = {}
     for stack in stacks:
@@ -158,6 +161,8 @@ async def compare_stacks(
             processors[stack] = LlamaIndexProcessor()
         elif stack == "landingai":
             processors[stack] = LandingAIProcessor()
+        elif stack == "reducto":
+            processors[stack] = ReductoProcessor()
 
     comparator = StackComparator(processors)
     report = await comparator.compare_batch(file_paths, **options)
@@ -184,6 +189,8 @@ async def run_benchmark(
         processor = LlamaIndexProcessor()
     elif stack == "landingai":
         processor = LandingAIProcessor()
+    elif stack == "reducto":
+        processor = ReductoProcessor()
     else:
         raise ValueError(f"Unknown stack: {stack}")
 
@@ -225,11 +232,13 @@ async def demo():
     llama_key = os.environ.get("LLAMA_CLOUD_API_KEY")
     landing_key = os.environ.get("LANDINGAI_API_KEY")
     google_key = os.environ.get("GOOGLE_API_KEY")
+    reducto_key = os.environ.get("REDUCTO_API_KEY")
 
     print("\nAPI Key Status:")
     print(f"  LLAMA_CLOUD_API_KEY: {'Set' if llama_key else 'Not set'}")
     print(f"  LANDINGAI_API_KEY: {'Set' if landing_key else 'Not set'}")
     print(f"  GOOGLE_API_KEY: {'Set' if google_key else 'Not set'}")
+    print(f"  REDUCTO_API_KEY: {'Set' if reducto_key else 'Not set'}")
 
     # Get test documents
     documents = get_test_documents()
@@ -267,6 +276,19 @@ async def demo():
                 print(f"  Chunks: {result.total_chunks}")
                 print(f"  Processing time: {result.metadata.processing_time_ms:.0f}ms")
                 print(f"  Has grounding: {result.has_grounding}")
+            except Exception as e:
+                print(f"  Error: {e}")
+
+        if reducto_key:
+            print("\nUsing Reducto stack...")
+            try:
+                result = await process_document(test_doc, stack="reducto")
+                print(f"  Markdown length: {len(result.markdown)} chars")
+                print(f"  Chunks: {result.total_chunks}")
+                print(f"  Processing time: {result.metadata.processing_time_ms:.0f}ms")
+                print(f"  Has grounding: {result.has_grounding}")
+                if result.metadata.api_credits_used:
+                    print(f"  Credits used: {result.metadata.api_credits_used}")
             except Exception as e:
                 print(f"  Error: {e}")
 

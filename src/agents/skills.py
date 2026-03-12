@@ -22,6 +22,7 @@ from ..common.interfaces import ClassificationRule
 # Global processor instances (lazy initialized)
 _llama_processor = None
 _landing_processor = None
+_reducto_processor = None
 
 
 def _get_llama_processor():
@@ -42,6 +43,15 @@ def _get_landing_processor():
     return _landing_processor
 
 
+def _get_reducto_processor():
+    """Get or create Reducto processor instance."""
+    global _reducto_processor
+    if _reducto_processor is None:
+        from ..reducto_stack import ReductoProcessor
+        _reducto_processor = ReductoProcessor()
+    return _reducto_processor
+
+
 @tool
 def parse_document(
     file_path: str,
@@ -57,7 +67,7 @@ def parse_document(
     Args:
         file_path: The path to the document file to parse.
                    Supported formats: PDF, PNG, JPG, JPEG, GIF, BMP, TIFF, WebP
-        processor: Which processor to use - "llamaindex" or "landingai".
+        processor: Which processor to use - "llamaindex", "landingai", or "reducto".
                    Default is "llamaindex".
         tier: Parsing tier for LlamaIndex - "cost_effective", "agentic",
               "agentic_plus", or "fast". Default is "agentic".
@@ -101,8 +111,13 @@ def parse_document(
             result = asyncio.run(proc.parser.parse(file_path=file_path))
             return result["markdown"]
 
+        elif processor == "reducto":
+            proc = _get_reducto_processor()
+            result = asyncio.run(proc.parser.parse(file_path=file_path))
+            return result["markdown"]
+
         else:
-            return f"Error: Unknown processor '{processor}'. Use 'llamaindex' or 'landingai'."
+            return f"Error: Unknown processor '{processor}'. Use 'llamaindex', 'landingai', or 'reducto'."
 
     except Exception as e:
         return f"Error parsing document: {str(e)}"
@@ -127,7 +142,7 @@ def extract_from_document(
                 Examples:
                 - "invoice_number, total, vendor_name, date"
                 - '{"invoice_number": "string", "total": "number"}'
-        processor: Which processor to use - "llamaindex" or "landingai".
+        processor: Which processor to use - "llamaindex", "landingai", or "reducto".
                    Default is "llamaindex".
 
     Returns:
@@ -180,6 +195,21 @@ def extract_from_document(
                 }
             }
             proc = _get_landing_processor()
+            result = asyncio.run(proc.extractor.extract_with_json_schema(
+                content=content,
+                json_schema=json_schema
+            ))
+            return json.dumps(result.fields, indent=2)
+
+        elif processor == "reducto":
+            json_schema = {
+                "type": "object",
+                "properties": {
+                    name: {"type": "string", "description": f"Extract {name}"}
+                    for name in field_names
+                }
+            }
+            proc = _get_reducto_processor()
             result = asyncio.run(proc.extractor.extract_with_json_schema(
                 content=content,
                 json_schema=json_schema

@@ -232,6 +232,7 @@ def check_api_keys():
     keys = {
         "LLAMA_CLOUD_API_KEY": bool(os.environ.get("LLAMA_CLOUD_API_KEY")),
         "LANDINGAI_API_KEY": bool(os.environ.get("LANDINGAI_API_KEY")),
+        "REDUCTO_API_KEY": bool(os.environ.get("REDUCTO_API_KEY")),
         "OPENAI_API_KEY": bool(os.environ.get("OPENAI_API_KEY")),
         "GOOGLE_API_KEY": bool(os.environ.get("GOOGLE_API_KEY")),
     }
@@ -309,6 +310,29 @@ def get_landing_processor():
         raise
 
 
+def get_reducto_processor():
+    """Get Reducto processor with error handling."""
+    log_to_ui("Initializing Reducto processor...")
+    try:
+        from src.reducto_stack import ReductoProcessor
+        processor = ReductoProcessor()
+        log_to_ui("Reducto processor initialized successfully", "info")
+        return processor
+    except ImportError as e:
+        error_msg = str(e)
+        if "reducto" in error_msg.lower():
+            log_to_ui("Reducto SDK not installed. Run: pip install reductoai", "error")
+            raise ImportError(
+                "Reducto SDK not installed.\n"
+                "Please run: pip install reductoai"
+            )
+        log_to_ui(f"Failed to import Reducto: {error_msg}", "error")
+        raise
+    except Exception as e:
+        log_to_ui(f"Failed to initialize Reducto processor: {str(e)}", "error")
+        raise
+
+
 def get_schema_generator():
     """Get schema generator with error handling."""
     log_to_ui("Initializing schema generator...")
@@ -345,7 +369,7 @@ def render_sidebar():
         st.subheader("🔧 Processor")
         processor = st.radio(
             "Select Document Processor",
-            ["LlamaIndex", "LandingAI"],
+            ["LlamaIndex", "LandingAI", "Reducto"],
             help="Choose which AI service to use for processing"
         )
 
@@ -503,6 +527,37 @@ async def run_parse(file_path: str, settings: dict) -> dict:
         except Exception as e:
             log_to_ui(f"LlamaIndex parse failed: {str(e)}", "error")
             raise
+    elif settings["processor"] == "Reducto":
+        try:
+            from src.reducto_stack.parser import ReductoParseWrapper
+            log_to_ui("ReductoParseWrapper imported successfully")
+
+            parser = ReductoParseWrapper()
+            log_to_ui("ReductoParseWrapper initialized")
+
+            result = await parser.parse(file_path=Path(file_path))
+            log_to_ui(f"Parse complete: {len(result['markdown'])} characters extracted")
+
+            page_count = result.get("metadata", {}).get("page_count", 1)
+
+            return {
+                "markdown": result["markdown"],
+                "pages": page_count,
+                "processor": "Reducto"
+            }
+        except ImportError as e:
+            error_msg = str(e)
+            if "reducto" in error_msg.lower():
+                log_to_ui("Reducto SDK not installed. Run: pip install reductoai", "error")
+                raise ImportError(
+                    "Reducto SDK not installed.\n"
+                    "Please run: pip install reductoai"
+                )
+            log_to_ui(f"Reducto parse failed: {error_msg}", "error")
+            raise
+        except Exception as e:
+            log_to_ui(f"Reducto parse failed: {str(e)}", "error")
+            raise
     else:
         try:
             from src.landingai_stack.parser import ADEParseWrapper
@@ -625,6 +680,17 @@ async def run_extract(content: str, settings: dict, schema_info: dict = None) ->
                 "processor": "LlamaIndex",
                 "schema_used": json_schema
             }
+        elif settings["processor"] == "Reducto":
+            from src.reducto_stack.extractor import ReductoExtractWrapper
+            extractor = ReductoExtractWrapper()
+            result = await extractor.extract_with_json_schema(content=content, json_schema=json_schema)
+            log_to_ui(f"Extraction complete: {len(result.fields)} fields extracted")
+            return {
+                "fields": result.fields,
+                "confidence": result.extraction_confidence,
+                "processor": "Reducto",
+                "schema_used": json_schema
+            }
         else:
             from src.landingai_stack.extractor import ADEExtractWrapper
             extractor = ADEExtractWrapper()
@@ -660,6 +726,13 @@ async def run_split(content: str, settings: dict) -> dict:
                 categories=categories,
                 max_chunk_size=settings["chunk_size"],
                 overlap=settings["overlap"]
+            )
+        elif settings["processor"] == "Reducto":
+            from src.reducto_stack.splitter import ReductoSplitWrapper
+            splitter = ReductoSplitWrapper()
+            chunks = await splitter.split(
+                content=content,
+                categories=categories,
             )
         else:
             from src.landingai_stack.splitter import ADESplitWrapper

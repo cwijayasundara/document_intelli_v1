@@ -8,6 +8,9 @@ llama-cloud>=1.2.0
 # LandingAI ADE SDK
 landingai-ade>=0.1.0
 
+# Reducto AI SDK
+reductoai>=1.0.0
+
 # HTTP clients
 requests>=2.31.0
 aiohttp>=3.9.0

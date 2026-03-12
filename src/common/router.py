@@ -19,6 +19,7 @@ class ProcessorType(str, Enum):
     LLAMAINDEX = "llamaindex"
     LANDINGAI = "landingai"
     GEMINI = "gemini"
+    REDUCTO = "reducto"
 
 
 class DocumentRouter:
@@ -28,6 +29,7 @@ class DocumentRouter:
     LLAMAINDEX_FORMATS = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"}
     LANDINGAI_FORMATS = {".pdf", ".png", ".jpg", ".jpeg", ".xlsx", ".csv"}
     GEMINI_FORMATS = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"}
+    REDUCTO_FORMATS = {".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".docx", ".xlsx", ".pptx"}
 
     # Keywords that suggest handwriting
     HANDWRITING_INDICATORS = {
@@ -70,6 +72,7 @@ class DocumentRouter:
             ProcessorType.LLAMAINDEX: self.LLAMAINDEX_FORMATS,
             ProcessorType.LANDINGAI: self.LANDINGAI_FORMATS,
             ProcessorType.GEMINI: self.GEMINI_FORMATS,
+            ProcessorType.REDUCTO: self.REDUCTO_FORMATS,
         }
 
         return ext in format_map.get(processor, set())
@@ -198,6 +201,18 @@ class DocumentRouter:
 
             # Enable grounding for audit trails
             options["include_grounding"] = True
+
+        # Reducto specific options
+        elif processor == ProcessorType.REDUCTO:
+            options["include_grounding"] = True
+            if hint in {
+                DocumentType.DIAGRAM, DocumentType.FLOWCHART,
+                DocumentType.SPREADSHEET
+            }:
+                options["enhance"] = {
+                    "summarize_figures": True,
+                    "agentic": [{"scope": "table"}],
+                }
 
         # Gemini specific options
         elif processor == ProcessorType.GEMINI:
